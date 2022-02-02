@@ -1,0 +1,9 @@
+com\xxx\blog\admin\AdminApp.class
+com\xxx\blog\admin\config\MybatisPlusConfig.class
+com\xxx\blog\admin\Vo\PageResult.class
+com\xxx\blog\admin\Vo\Result.class
+com\xxx\blog\admin\Controller\AdminController.class
+com\xxx\blog\admin\model\params\PageParam.class
+com\xxx\blog\admin\Service\PermissionService.class
+com\xxx\blog\admin\Pojo\Permission.class
+com\xxx\blog\admin\Mapper\PermissionMapper.class
