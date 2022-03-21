@@ -119,7 +119,9 @@ public class ArticleServiceImpl implements ArticleService {
     //首页最新文章
     @Override
     public Result newArticle(int limit) {
+
         LambdaQueryWrapper<Article> queryWrapper = new LambdaQueryWrapper<>();
+
         queryWrapper.orderByDesc(Article::getCreateDate);
         queryWrapper.select(Article::getId, Article::getTitle);
         queryWrapper.last("limit "+limit);
