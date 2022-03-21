@@ -33,8 +33,5 @@ public class JWTUtils {
             e.printStackTrace();
         }
         return null;
-
     }
-
-
 }

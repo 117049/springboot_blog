@@ -22,7 +22,7 @@ public class ThreadPoolConfig {
         // 设置线程活跃时间（秒）
         executor.setKeepAliveSeconds(60);
         // 设置默认线程名称
-        executor.setThreadNamePrefix("码神之路博客项目");
+        executor.setThreadNamePrefix("西虹市的西红柿博客项目");
         // 等待所有任务结束后再关闭线程池
         executor.setWaitForTasksToCompleteOnShutdown(true);
         //执行初始化

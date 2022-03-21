@@ -44,7 +44,7 @@ public class LoginServiceImpl implements LoginService {
         if(StringUtils.isEmpty(account)||StringUtils.isEmpty(password)){
             return Result.fail(ErrorCode.PARAMS_ERROR.getCode(), ErrorCode.PARAMS_ERROR.getMsg());
         }
-        //使用md5进行加密有可能会被破解，加入加密盐
+        // 使用md5进行加密有可能会被破解，加入加密盐
         password = DigestUtils.md5Hex(password + salt);
 
         SysUser sysuser = sysuserservice.findUser(account, password);

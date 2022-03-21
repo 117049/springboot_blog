@@ -20,7 +20,6 @@ import java.lang.reflect.Method;
 public class LogAspect {
     @Pointcut("@annotation(com.xxx.blog.common.aop.LogAnnotation)")
     public void pt(){
-
     }
 
     @Around("pt()") //环绕通知

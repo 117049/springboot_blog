@@ -19,6 +19,4 @@ public class RegistController {
     public Result register(@RequestBody LoginParam loginParam) {
         return loginservice.register(loginParam);
     }
-
-
 }

@@ -15,4 +15,6 @@ public interface SysUserService{
 
     void save(SysUser sysuser);
     UserVo findUserVoById(Long id);
+
+
 }

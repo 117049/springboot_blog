@@ -1,5 +1,6 @@
 package com.xxx.blog.service.impl;
 
+import com.alibaba.fastjson.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -19,13 +20,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.joda.time.DateTime;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 
 @Service
 @Slf4j
@@ -43,6 +45,9 @@ public class ArticleServiceImpl implements ArticleService {
 
     @Autowired
     private ArticleTagMapper articleTagMapper;
+
+    @Autowired
+    private RedisTemplate<String, String> redisTemplate;
     /**
      * @Description: 分页查询article数据库表得到结果
      */
@@ -50,11 +55,15 @@ public class ArticleServiceImpl implements ArticleService {
     @Override
     public Result listArticle(PageParams pageparams) {
         Page<Article> page = new Page<>(pageparams.getPage(), pageparams.getPageSize());
+
+
         IPage<Article> articleIPage = articleMapper.listArticle(page,
                 pageparams.getCategoryId(),
                 pageparams.getTagId(),
                 pageparams.getYear(),
                 pageparams.getMonth());
+
+
 
         List<Article> records = articleIPage.getRecords();
 
@@ -130,10 +139,12 @@ public class ArticleServiceImpl implements ArticleService {
     //查看文章详情
     @Override
     public Result findArticleById(Long articleId) {
+
         Article article = this.articleMapper.selectById(articleId);
         log.info(article.getId().toString());
         ArticleVo articleVo = copy(article, true, true, true, true);
         log.info(articleVo.getId().toString());
+
 
         //查看完文章，增加阅读数，有没有问题？在查看完文章之后，本应该直接返回数据，这个时候做了一个更新操作
         //更新是加写锁，会阻塞读操作，此时性能会比较低，更新耗时，一旦更新出现问题，不能影响查看文章的操作

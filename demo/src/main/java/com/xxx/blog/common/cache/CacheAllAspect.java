@@ -1,5 +1,6 @@
 package com.xxx.blog.common.cache;
 
+
 import com.alibaba.fastjson.JSON;
 import com.xxx.blog.vo.params.Result;
 import lombok.extern.slf4j.Slf4j;
@@ -12,6 +13,7 @@ import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.annotation.Pointcut;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.stereotype.Component;
 import java.lang.reflect.Method;
 
@@ -19,15 +21,17 @@ import java.lang.reflect.Method;
 @Aspect
 @Component
 @Slf4j
-public class CacheAspect {
+public class CacheAllAspect {
+
+    private SingleInstanceAtomic singleNum = SingleInstanceAtomic.getInstance();
 
     @Autowired
     private RedisTemplate<String, String> redisTemplate;
 
-    @Pointcut("@annotation(com.xxx.blog.common.cache.Cache)")
-    public void pa(){}
+    @Pointcut("@annotation(com.xxx.blog.common.cache.CacheAll)")
+    public void pt(){}
 
-    @Around("pa()")
+    @Around("pt()")
     public Object around(ProceedingJoinPoint pjp){
         try {
             Signature signature = pjp.getSignature();
@@ -49,7 +53,6 @@ public class CacheAspect {
                     parameterTypes[i] = null;
                 }
             }
-
             if (StringUtils.isNotEmpty(params)) {
                 //加密 以防出现key过长以及字符转义获取不到的情况
                 params = DigestUtils.md5Hex(params);
@@ -58,31 +61,44 @@ public class CacheAspect {
             //获取Cache注解
             Cache annotation = method.getAnnotation(Cache.class);
             //缓存过期时间
-            long expire = annotation.expire();
-            //缓存名称
-            String name = annotation.name();
+
             //先从redis获取
 
+            Long id = (Long) args[0];
+            if(args.length >= 1){
+                if(methodName.equals("findArticleById") && redisTemplate.hasKey("Article_" + String.valueOf(args[0]))){
 
-            String redisKey = name + "::" + className+"::"+methodName+"::"+params;
-
-            String redisValue = redisTemplate.opsForValue().get(redisKey);
-
-            if (StringUtils.isNotEmpty(redisValue)){
-                log.info("走了缓存~~~,{},{}",className,methodName);
-                return JSON.parseObject(redisValue, Result.class);
+                    if(redisTemplate.hasKey("Article_" + String.valueOf(id))){
+                        log.info("进入了方法。。。。。。。。。。。。。。。。。阅读全文");
+                        String redisAllArticle = redisTemplate.opsForValue().get("Article_" + String.valueOf(id));
+                        //更新zset表
+                        redisTemplate.opsForZSet().incrementScore("sort_set", String.valueOf(id),Double.valueOf(-1000));
+                        return JSON.parseObject(redisAllArticle, Result.class);
+                    }
+                }
             }
-
 
             Object proceed = pjp.proceed();
             //此时没有查询到缓存
             //循环遍历数据库查询到的数据，将数据添加到缓存，如果已存在则忽略
 
-            redisTemplate.opsForValue().set(redisKey,JSON.toJSONString(proceed));
-            log.info("存入缓存~~~ {},{}",className,methodName);
+            //当查看文章详情时添加文章所有信息到redis
+            String name = "Article_" + String.valueOf(id);
 
+            //如果为空，则不进行长度判断删除
+            Long sort_set = redisTemplate.opsForZSet().zCard("sort_set");
+            if(sort_set > 2){
+                //此时zset长度超出限制，最高点
+                ZSetOperations.TypedTuple<String> sort_set1 = redisTemplate.opsForZSet().popMax("sort_set");
+                String str = String.valueOf(sort_set1.getValue());
+                redisTemplate.delete("Article_" + str);
+            }
+
+            //添加到redis
+            redisTemplate.opsForValue().set(name, JSON.toJSONString(proceed));
+            int num = singleNum.getNum();
+            redisTemplate.opsForZSet().add("sort_set", String.valueOf(id),Double.valueOf(num));
             return proceed;
-
         } catch (Throwable throwable) {
             throwable.printStackTrace();
         }

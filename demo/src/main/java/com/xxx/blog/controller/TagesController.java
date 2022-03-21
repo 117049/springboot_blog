@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-@RestController//使用功能json进行交互
+@RestController  //使用功能json进行交互
 @RequestMapping("tags")
 public class TagesController {
     @Autowired

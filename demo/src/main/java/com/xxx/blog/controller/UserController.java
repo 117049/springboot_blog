@@ -18,5 +18,4 @@ public class UserController {
 
         return sysUserLoginService.getUserInfoByToken(token);
     }
-
 }
