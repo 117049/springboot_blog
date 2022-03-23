@@ -16,6 +16,7 @@ import com.xxx.blog.vo.ArticleVo;
 import com.xxx.blog.vo.params.ArticleParam;
 import com.xxx.blog.vo.params.PageParams;
 import com.xxx.blog.vo.params.Result;
+import io.netty.util.internal.StringUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.joda.time.DateTime;
 import org.springframework.beans.BeanUtils;
@@ -23,10 +24,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+
+import java.text.SimpleDateFormat;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Service
@@ -48,60 +48,64 @@ public class ArticleServiceImpl implements ArticleService {
 
     @Autowired
     private RedisTemplate<String, String> redisTemplate;
+
+    @Autowired
+    private ThreadService threadService;
     /**
      * @Description: 分页查询article数据库表得到结果
      */
 
-    @Override
-    public Result listArticle(PageParams pageparams) {
-        Page<Article> page = new Page<>(pageparams.getPage(), pageparams.getPageSize());
-
-
-        IPage<Article> articleIPage = articleMapper.listArticle(page,
-                pageparams.getCategoryId(),
-                pageparams.getTagId(),
-                pageparams.getYear(),
-                pageparams.getMonth());
-
-
-
-        List<Article> records = articleIPage.getRecords();
-
-        return Result.success(copyList(records, true, true));
-    }
 //    @Override
 //    public Result listArticle(PageParams pageparams) {
-//        System.out.println(articleMapper);
-//
 //        Page<Article> page = new Page<>(pageparams.getPage(), pageparams.getPageSize());
-//        LambdaQueryWrapper<Article> queryWrapper = new LambdaQueryWrapper<>();
-//        if(pageparams.getCategoryId()!=null){
-//            queryWrapper.eq(Article::getCategoryId, pageparams.getCategoryId());
-//        }
-//        List<Long> articleIdList = new ArrayList<Long>();
-//        if(pageparams.getTagId()!=null){
-//            LambdaQueryWrapper<ArticleTag> articleTagequeryWrapperTag = new LambdaQueryWrapper<>();
-//            articleTagequeryWrapperTag.eq(ArticleTag::getTagId, pageparams.getTagId());
-//            List<ArticleTag> articleTags = articleTagMapper.selectList(articleTagequeryWrapperTag);
-//            for(ArticleTag articleTag : articleTags){
-//                articleIdList.add(articleTag.getArticleId());
-//            }
-//            if(articleIdList.size()>0){
-//                queryWrapper.in(Article::getId, articleIdList);
-//            }
-//        }
 //
-//        //是否置顶排序
-//        queryWrapper.orderByDesc(Article::getWeight);
-//        //根据时间进行排序
-//        queryWrapper.orderByDesc(Article::getCreateDate);
-//        Page<Article> articlePage = articleMapper.selectPage(page, queryWrapper);
-//        List<Article> records = articlePage.getRecords();
-//        //需要对数据库读取的数据进行格式转换
-//        List<ArticleVo> articleVoList = copyList(records, true, true);
-//        System.out.println(articleVoList);
-//        return Result.success(articleVoList);
+//
+//        IPage<Article> articleIPage = articleMapper.listArticle(page,
+//                pageparams.getCategoryId(),
+//                pageparams.getTagId(),
+//                pageparams.getYear(),
+//                pageparams.getMonth());
+//
+//        List<Article> records = articleIPage.getRecords();
+//
+//        return Result.success(copyList(records, true, true));
 //    }
+    @Override
+    public Result listArticle(PageParams pageparams) {
+        System.out.println(articleMapper);
+
+        Page<Article> page = new Page<>(pageparams.getPage(), pageparams.getPageSize());
+        LambdaQueryWrapper<Article> queryWrapper = new LambdaQueryWrapper<>();
+        if(pageparams.getCategoryId()!=null){
+            queryWrapper.eq(Article::getCategoryId, pageparams.getCategoryId());
+        }
+
+        List<Long> articleIdList = new ArrayList<Long>();
+        if(pageparams.getTagId()!=null){
+            LambdaQueryWrapper<ArticleTag> articleTagequeryWrapperTag = new LambdaQueryWrapper<>();
+            articleTagequeryWrapperTag.eq(ArticleTag::getTagId, pageparams.getTagId());
+            List<ArticleTag> articleTags = articleTagMapper.selectList(articleTagequeryWrapperTag);
+            for(ArticleTag articleTag : articleTags){
+                articleIdList.add(articleTag.getArticleId());
+            }
+            if(articleIdList.size()>0){
+                queryWrapper.in(Article::getId, articleIdList);
+            }
+        }
+
+        //是否置顶排序
+        queryWrapper.orderByDesc(Article::getWeight);
+        //根据时间进行排序
+        queryWrapper.orderByDesc(Article::getCreateDate);
+
+        Page<Article> articlePage = articleMapper.selectPage(page, queryWrapper);
+        List<Article> records = articlePage.getRecords();
+
+        //需要对数据库读取的数据进行格式转换
+        List<ArticleVo> articleVoList = copyList(records, true, true);
+        System.out.println(articleVoList);
+        return Result.success(articleVoList);
+    }
 
     //首页最热文章
     @Override
@@ -112,7 +116,6 @@ public class ArticleServiceImpl implements ArticleService {
         queryWrapper.last("limit "+limit);
         //大概意思就是 select id, title from article order by view_counts desc limit 5
         List<Article> articles = articleMapper.selectList(queryWrapper);
-
         return Result.success(copyList(articles, false, false));
     }
 
@@ -134,10 +137,12 @@ public class ArticleServiceImpl implements ArticleService {
     @Override
     public Result listArchives() {
         List<Archives> articles = articleMapper.listArchives();
+
+
         return Result.success(articles);
     }
-    @Autowired
-    private ThreadService threadService;
+
+
     //查看文章详情
     @Override
     public Result findArticleById(Long articleId) {
@@ -169,7 +174,9 @@ public class ArticleServiceImpl implements ArticleService {
         article.setViewCounts(0);
         article.setTitle(articleParam.getTitle());
         article.setSummary(articleParam.getSummary());
+
         article.setCreateDate(System.currentTimeMillis());
+
         article.setCategoryId(Long.parseLong(articleParam.getCategory().getId()));
         article.setCommentCounts(0);
         article.setBodyId(-1L);
@@ -216,7 +223,6 @@ public class ArticleServiceImpl implements ArticleService {
         for(Article record: records){
             articleVoList.add(copy(record, isTag, isAuthor, isBody, isCategory));
         }
-
         return articleVoList;
     }
 
@@ -228,7 +234,15 @@ public class ArticleServiceImpl implements ArticleService {
         ArticleVo articleVo = new ArticleVo();
         articleVo.setId(String.valueOf(article.getId()));
         BeanUtils.copyProperties(article, articleVo);
-        articleVo.setCreateDate(new DateTime(article.getCreateDate()).toString("yyyy-mm-dd HH:mm"));
+
+        if(article.getCreateDate()!=null){
+            Long timeStamp = System.currentTimeMillis();  //获取当前时间戳
+            SimpleDateFormat sdf=new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+            String sd = sdf.format(new Date(article.getCreateDate()));      // 时间戳转换成时间
+            System.out.println("格式化结果：" + sd);
+            articleVo.setCreateDate(sd);
+        }
+
         //并不是所有的都需要作者和标签
         if(isTag){
             Long articleId = article.getId();

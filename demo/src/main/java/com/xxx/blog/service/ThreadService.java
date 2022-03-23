@@ -2,26 +2,27 @@ package com.xxx.blog.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.xxx.blog.config.SetUpQueue;
 import com.xxx.blog.dao.mapper.ArticleMapper;
 import com.xxx.blog.dao.pojo.Article;
+import com.xxx.blog.vo.params.QueueResult;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
 @Component
 public class ThreadService {
+
+    @Autowired
+    SetUpQueue setupqueue;
+
     //期望在线程池执行，不会影响主线程
     @Async("taskExecutor")
     public void updateArticleViewCount(ArticleMapper articlemapper, Article article) {
 
-        int viewCounts = article.getViewCounts();
-        Article ArticleUpdate = new Article();
-        ArticleUpdate.setViewCounts(viewCounts+1);
-        //update article set view_count=100 where view_count=99 and id=11;
-        LambdaUpdateWrapper<Article> updateWrapper = new LambdaUpdateWrapper<>();
-        updateWrapper.eq(Article::getId, article.getId());
-        //设置一个CAS，为了在多线程下使用
-        updateWrapper.eq(Article::getViewCounts, viewCounts);
-        articlemapper.update(ArticleUpdate, updateWrapper);
+        //对article进行封装
+        QueueResult queueResult = new QueueResult(1, "通过文章主体更新文章浏览量", article);
+        setupqueue.QueueAdd(queueResult);
 
         try {
             Thread.sleep(5000);
@@ -29,6 +30,15 @@ public class ThreadService {
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
+    }
+
+    @Async("taskExecutor")
+    public void updateArticleViewCountByArticleId(Long ArticleId) {
+
+        //对article进行封装
+        QueueResult queueResult = new QueueResult(2, "通过文章Id更新文章浏览量", ArticleId);
+        setupqueue.QueueAdd(queueResult);
+
     }
 
 }

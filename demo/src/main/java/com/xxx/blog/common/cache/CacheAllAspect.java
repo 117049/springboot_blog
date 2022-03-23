@@ -2,6 +2,7 @@ package com.xxx.blog.common.cache;
 
 
 import com.alibaba.fastjson.JSON;
+import com.xxx.blog.service.ThreadService;
 import com.xxx.blog.vo.params.Result;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.digest.DigestUtils;
@@ -27,6 +28,9 @@ public class CacheAllAspect {
 
     @Autowired
     private RedisTemplate<String, String> redisTemplate;
+
+    @Autowired
+    private ThreadService threadService;
 
     @Pointcut("@annotation(com.xxx.blog.common.cache.CacheAll)")
     public void pt(){}
@@ -73,6 +77,7 @@ public class CacheAllAspect {
                         String redisAllArticle = redisTemplate.opsForValue().get("Article_" + String.valueOf(id));
                         //更新zset表
                         redisTemplate.opsForZSet().incrementScore("sort_set", String.valueOf(id),Double.valueOf(-1000));
+                        threadService.updateArticleViewCountByArticleId(id);
                         return JSON.parseObject(redisAllArticle, Result.class);
                     }
                 }
