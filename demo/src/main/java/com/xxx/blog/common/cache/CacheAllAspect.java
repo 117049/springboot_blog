@@ -2,7 +2,9 @@ package com.xxx.blog.common.cache;
 
 
 import com.alibaba.fastjson.JSON;
+import com.xxx.blog.config.SetUpQueue;
 import com.xxx.blog.service.ThreadService;
+import com.xxx.blog.vo.params.QueueResult;
 import com.xxx.blog.vo.params.Result;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.digest.DigestUtils;
@@ -17,6 +19,7 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.stereotype.Component;
 import java.lang.reflect.Method;
+import java.util.Set;
 
 
 @Aspect
@@ -31,6 +34,9 @@ public class CacheAllAspect {
 
     @Autowired
     private ThreadService threadService;
+
+    @Autowired
+    private SetUpQueue Setup;
 
     @Pointcut("@annotation(com.xxx.blog.common.cache.CacheAll)")
     public void pt(){}
@@ -78,17 +84,24 @@ public class CacheAllAspect {
                         //更新zset表
                         redisTemplate.opsForZSet().incrementScore("sort_set", String.valueOf(id),Double.valueOf(-1000));
                         threadService.updateArticleViewCountByArticleId(id);
+                        //更新数据库的脏数据,通过异步队列进行删除
+
+                        QueueResult queueResult = new QueueResult(3, "删除缓存中的脏数据", null);
+                        Setup.QueueAdd(queueResult);
                         return JSON.parseObject(redisAllArticle, Result.class);
                     }
                 }
             }
 
+
             Object proceed = pjp.proceed();
             //此时没有查询到缓存
             //循环遍历数据库查询到的数据，将数据添加到缓存，如果已存在则忽略
-
             //当查看文章详情时添加文章所有信息到redis
+            //查看了文章，需要对缓存中的脏数据进行删除
             String name = "Article_" + String.valueOf(id);
+            QueueResult queueResult = new QueueResult(3, "删除缓存中的脏数据", null);
+            Setup.QueueAdd(queueResult);
 
             //如果为空，则不进行长度判断删除
             Long sort_set = redisTemplate.opsForZSet().zCard("sort_set");

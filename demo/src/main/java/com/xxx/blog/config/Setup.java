@@ -4,12 +4,17 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.xxx.blog.dao.mapper.ArticleMapper;
 import com.xxx.blog.dao.pojo.Article;
 import com.xxx.blog.vo.params.QueueResult;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
+
+import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 
+@Slf4j
 @Component
 public class Setup implements SetUpQueue, CommandLineRunner {
 
@@ -18,6 +23,8 @@ public class Setup implements SetUpQueue, CommandLineRunner {
     @Autowired
     private ArticleMapper articlemapper;
 
+    @Autowired
+    private RedisTemplate<String, String> redisTemplate;
 
     @Override
     public void QueueAdd(QueueResult article) {
@@ -28,7 +35,7 @@ public class Setup implements SetUpQueue, CommandLineRunner {
     @Override
     public void QueueConsume() {
         while(true){
-            System.out.println("阻塞状态---------------------------");
+            log.info("阻塞状态---------------------------");
 
             QueueResult poll = null;
             try {
@@ -40,7 +47,7 @@ public class Setup implements SetUpQueue, CommandLineRunner {
             int catagoryId = poll.getCatagoryId();
 
             if(catagoryId == 1){
-                System.out.println("队列更新完成");
+                log.info("队列更新完成");
                 Article article = (Article) poll.getDataClass();
                 int viewCounts = article.getViewCounts();
 
@@ -60,7 +67,7 @@ public class Setup implements SetUpQueue, CommandLineRunner {
             }
             else if(catagoryId == 2){
                 // 通过文章Id更新浏览量
-                System.out.println("队列更新完成");
+                log.info("队列更新完成");
                 Long ArticleId = (Long) poll.getDataClass();
                 // 先查询对应文章的阅读量
                 Article article = this.articlemapper.selectById(ArticleId);
@@ -78,6 +85,15 @@ public class Setup implements SetUpQueue, CommandLineRunner {
                     System.out.println("修改失败，重新添加队列对应节点");
                     queue.offer(poll);
                 }
+            }else if(catagoryId == 3){
+                log.info("队列更新完成");
+                //删除最新文章缓存
+                Boolean deletenew = redisTemplate.delete("news_article::ArticleController::newArticles::");
+                //删除最热文章缓存
+                Boolean deletehot = redisTemplate.delete("hot_article::ArticleController::hotArticles::");
+                //删除列表缓存
+                Set<String> keysdel = redisTemplate.keys("list_article::ArticleController::listArticles::" + "*");
+                Long deletelist = redisTemplate.delete(keysdel);
             }
         }
     }

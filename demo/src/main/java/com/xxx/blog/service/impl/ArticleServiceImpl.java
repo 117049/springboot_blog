@@ -16,18 +16,18 @@ import com.xxx.blog.vo.ArticleVo;
 import com.xxx.blog.vo.params.ArticleParam;
 import com.xxx.blog.vo.params.PageParams;
 import com.xxx.blog.vo.params.Result;
-import io.netty.util.internal.StringUtil;
 import lombok.extern.slf4j.Slf4j;
-import org.joda.time.DateTime;
+import org.apache.commons.codec.digest.DigestUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
 import java.text.SimpleDateFormat;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantLock;
+
 
 @Service
 @Slf4j
@@ -54,6 +54,9 @@ public class ArticleServiceImpl implements ArticleService {
     /**
      * @Description: 分页查询article数据库表得到结果
      */
+    private ReentrantLock lockHotArticle = new ReentrantLock();
+    private ReentrantLock lockNewArticle = new ReentrantLock();
+    private ReentrantLock lockListArticle = new ReentrantLock();
 
 //    @Override
 //    public Result listArticle(PageParams pageparams) {
@@ -72,66 +75,115 @@ public class ArticleServiceImpl implements ArticleService {
 //    }
     @Override
     public Result listArticle(PageParams pageparams) {
-        System.out.println(articleMapper);
-
-        Page<Article> page = new Page<>(pageparams.getPage(), pageparams.getPageSize());
-        LambdaQueryWrapper<Article> queryWrapper = new LambdaQueryWrapper<>();
-        if(pageparams.getCategoryId()!=null){
-            queryWrapper.eq(Article::getCategoryId, pageparams.getCategoryId());
-        }
-
-        List<Long> articleIdList = new ArrayList<Long>();
-        if(pageparams.getTagId()!=null){
-            LambdaQueryWrapper<ArticleTag> articleTagequeryWrapperTag = new LambdaQueryWrapper<>();
-            articleTagequeryWrapperTag.eq(ArticleTag::getTagId, pageparams.getTagId());
-            List<ArticleTag> articleTags = articleTagMapper.selectList(articleTagequeryWrapperTag);
-            for(ArticleTag articleTag : articleTags){
-                articleIdList.add(articleTag.getArticleId());
+        try{
+            String paramsString = JSON.toJSONString(pageparams);
+            if (StringUtils.isNotEmpty(paramsString)) {
+                //加密 以防出现key过长以及字符转义获取不到的情况
+                paramsString = DigestUtils.md5Hex(paramsString);
             }
-            if(articleIdList.size()>0){
-                queryWrapper.in(Article::getId, articleIdList);
+            lockListArticle.lock();
+            if(!redisTemplate.hasKey("list_article::ArticleController::listArticles::" + paramsString)){
+                Page<Article> page = new Page<>(pageparams.getPage(), pageparams.getPageSize());
+                LambdaQueryWrapper<Article> queryWrapper = new LambdaQueryWrapper<>();
+                if(pageparams.getCategoryId()!=null){
+                    queryWrapper.eq(Article::getCategoryId, pageparams.getCategoryId());
+                }
+
+                List<Long> articleIdList = new ArrayList<Long>();
+                if(pageparams.getTagId()!=null){
+                    LambdaQueryWrapper<ArticleTag> articleTagequeryWrapperTag = new LambdaQueryWrapper<>();
+                    articleTagequeryWrapperTag.eq(ArticleTag::getTagId, pageparams.getTagId());
+                    List<ArticleTag> articleTags = articleTagMapper.selectList(articleTagequeryWrapperTag);
+                    for(ArticleTag articleTag : articleTags){
+                        articleIdList.add(articleTag.getArticleId());
+                    }
+                    if(articleIdList.size()>0){
+                        queryWrapper.in(Article::getId, articleIdList);
+                    }
+                }
+                //是否置顶排序
+                queryWrapper.orderByDesc(Article::getWeight);
+                //根据时间进行排序
+                queryWrapper.orderByDesc(Article::getCreateDate);
+
+                Page<Article> articlePage = articleMapper.selectPage(page, queryWrapper);
+
+                List<Article> records = articlePage.getRecords();
+
+                //需要对数据库读取的数据进行格式转换
+                List<ArticleVo> articleVoList = copyList(records, true, true);
+                System.out.println(articleVoList);
+                return Result.success(articleVoList);
+            }else{
+                String redisValue = redisTemplate.opsForValue().get("list_article::ArticleController::listArticles::" + paramsString);
+                if (StringUtils.isNotEmpty(redisValue)){
+                    log.info("重新走了缓存");
+                    return JSON.parseObject(redisValue, Result.class);
+                }
             }
+        }finally {
+            lockListArticle.unlock();
         }
-
-        //是否置顶排序
-        queryWrapper.orderByDesc(Article::getWeight);
-        //根据时间进行排序
-        queryWrapper.orderByDesc(Article::getCreateDate);
-
-        Page<Article> articlePage = articleMapper.selectPage(page, queryWrapper);
-        List<Article> records = articlePage.getRecords();
-
-        //需要对数据库读取的数据进行格式转换
-        List<ArticleVo> articleVoList = copyList(records, true, true);
-        System.out.println(articleVoList);
-        return Result.success(articleVoList);
+        return null;
     }
 
     //首页最热文章
     @Override
     public Result hotArticle(int limit) {
-        LambdaQueryWrapper<Article> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.orderByDesc(Article::getViewCounts);
-        queryWrapper.select(Article::getId, Article::getTitle);
-        queryWrapper.last("limit "+limit);
-        //大概意思就是 select id, title from article order by view_counts desc limit 5
-        List<Article> articles = articleMapper.selectList(queryWrapper);
-        return Result.success(copyList(articles, false, false));
+
+        try{
+            lockHotArticle.lock();
+            // 二次判断 redis 中不包含最热文章缓存信息
+            if(!redisTemplate.hasKey("hot_article::ArticleController::hotArticles::")){
+                log.info("缓存中不含有最热文章数据，通过数据库查询");
+                LambdaQueryWrapper<Article> queryWrapper = new LambdaQueryWrapper<>();
+                queryWrapper.orderByDesc(Article::getViewCounts);
+                queryWrapper.select(Article::getId, Article::getTitle);
+                queryWrapper.last("limit "+limit);
+                //大概意思就是 select id, title from article order by view_counts desc limit 5
+                List<Article> articles = articleMapper.selectList(queryWrapper);
+
+                return Result.success(copyList(articles, false, false));
+            }else{
+                String redisValue = redisTemplate.opsForValue().get("hot_article::ArticleController::hotArticles::");
+                if (StringUtils.isNotEmpty(redisValue)){
+                    log.info("重新走了缓存");
+                    return JSON.parseObject(redisValue, Result.class);
+                }
+            }
+        }finally {
+            lockHotArticle.unlock();
+        }
+        return null;
     }
 
     //首页最新文章
     @Override
     public Result newArticle(int limit) {
 
-        LambdaQueryWrapper<Article> queryWrapper = new LambdaQueryWrapper<>();
+        try{
+            lockNewArticle.lock();
+            if(!redisTemplate.hasKey("news_article::ArticleController::newArticles::")){
+                log.info("缓存中不含有最新文章数据，通过数据库查询");
+                LambdaQueryWrapper<Article> queryWrapper = new LambdaQueryWrapper<>();
 
-        queryWrapper.orderByDesc(Article::getCreateDate);
-        queryWrapper.select(Article::getId, Article::getTitle);
-        queryWrapper.last("limit "+limit);
-        //大概意思就是 select id, title from article order by CreateDate desc limit 5
-        List<Article> articles = articleMapper.selectList(queryWrapper);
-
-        return Result.success(copyList(articles, false, false));
+                queryWrapper.orderByDesc(Article::getCreateDate);
+                queryWrapper.select(Article::getId, Article::getTitle);
+                queryWrapper.last("limit "+limit);
+                //大概意思就是 select id, title from article order by CreateDate desc limit 5
+                List<Article> articles = articleMapper.selectList(queryWrapper);
+                return Result.success(copyList(articles, false, false));
+            }else{
+                String redisValue = redisTemplate.opsForValue().get("news_article::ArticleController::newArticles::");
+                if (StringUtils.isNotEmpty(redisValue)){
+                    log.info("重新走了缓存");
+                    return JSON.parseObject(redisValue, Result.class);
+                    }
+                }
+        }finally {
+            lockNewArticle.unlock();
+        }
+        return null;
     }
     //首页文章归纳
     @Override

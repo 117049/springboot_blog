@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class LoginServiceImpl implements LoginService {
 
-    private static final String salt = "mszlu!@#";
+    private static final String salt = "xhs";
 
     @Autowired
     private SysUserService sysuserservice;
@@ -54,6 +54,7 @@ public class LoginServiceImpl implements LoginService {
 
         String token = JWTUtils.createToken(sysuser.getId());
 
+
         //放入redis
         redisTemplate.opsForValue().set("TOKEN_"+token, JSON.toJSONString(sysuser), 1, TimeUnit.DAYS);
 
@@ -76,13 +77,14 @@ public class LoginServiceImpl implements LoginService {
         }
         //将json解析为User对象
         SysUser sysUser_1 = JSON.parseObject(userJson, SysUser.class);
+
         return sysUser_1;
     }
 
     @Override
     public Result logout(String token) {
         redisTemplate.delete("TOKEN_"+token);
-            return Result.success(null);
+        return Result.success(null);
     }
 
     /**
@@ -123,7 +125,7 @@ public class LoginServiceImpl implements LoginService {
         //token
         String token = JWTUtils.createToken(sysuser.getId());
 
-        redisTemplate.opsForValue().set("TOKEN_"+token, JSON.toJSONString(sysuser),1, TimeUnit.DAYS);
+        redisTemplate.opsForValue().set("TOKEN_"+token, JSON.toJSONString(sysuser),1, TimeUnit.SECONDS);
         //清除ThreadLocal中的数据
         UserThreadLocal.remove();
         return Result.success(token);

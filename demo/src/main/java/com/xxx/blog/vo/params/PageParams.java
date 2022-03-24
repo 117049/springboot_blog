@@ -1,8 +1,10 @@
 package com.xxx.blog.vo.params;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.Data;
 
 @Data
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class PageParams {
     private int page = 1;
     private int pageSize = 10;

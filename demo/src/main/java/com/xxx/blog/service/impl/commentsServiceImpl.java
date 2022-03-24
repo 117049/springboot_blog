@@ -60,6 +60,7 @@ public class commentsServiceImpl implements commentsService {
         Long toUserId = commentParam.getToUserId();
         comment.setToUid(toUserId == null ? 0 : toUserId);
         this.commentMapper.insert(comment);
+
         return Result.success(null);
     }
 

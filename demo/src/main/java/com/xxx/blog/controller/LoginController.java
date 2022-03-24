@@ -20,7 +20,6 @@ public class LoginController {
     @PostMapping
     public Result login(@RequestBody LoginParam loginParam){
         Result login = loginService.login(loginParam);
-
         return login;
     }
 }
